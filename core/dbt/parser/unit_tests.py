@@ -404,8 +404,7 @@ class UnitTestParser(YamlReader):
 
     def _promote_first_non_none_row(self, ut_fixture):
         """
-        Promote the first row with no None values to the top of the ut_fixture.rows list,
-        and normalize numeric types for consistent casting across all rows.
+        Promote the first row with no None values to the top of the ut_fixture.rows list.
 
         This function modifies the ut_fixture object in place.
 
@@ -414,12 +413,6 @@ class UnitTestParser(YamlReader):
         This leads to obscure type mismatch errors centered on a unit test fixture's `expect`.
         See https://github.com/dbt-labs/dbt-redshift/issues/821 for more info.
         """
-        if not ut_fixture.rows:
-            return
-            
-        # First, normalize numeric types across all rows for consistency
-        self._normalize_numeric_types(ut_fixture.rows)
-        
         non_none_row_index = None
 
         # Iterate through each row and its index
@@ -440,55 +433,6 @@ class UnitTestParser(YamlReader):
                 ut_fixture.rows[non_none_row_index],
                 ut_fixture.rows[0],
             )
-
-    def _normalize_numeric_types(self, rows):
-        """
-        Normalize numeric types across all rows to ensure consistent SQL casting.
-        
-        This prevents type mismatch errors in databases like Redshift where UNION ALL
-        operations require consistent column types. Specifically handles the case where
-        YAML type tags like !!float are used but values might be represented differently
-        (e.g., 1.0 vs 1).
-        """
-        if not rows:
-            return
-            
-        # Collect all column names
-        all_columns = set()
-        for row in rows:
-            all_columns.update(row.keys())
-        
-        # For each column, determine if it should be treated as float
-        for column_name in all_columns:
-            column_values = []
-            has_float_type = False
-            
-            # Collect all non-None values for this column
-            for row in rows:
-                if column_name in row and row[column_name] is not None:
-                    value = row[column_name]
-                    column_values.append(value)
-                    # Check if any value is explicitly a float type (from YAML !!float tag)
-                    if isinstance(value, float):
-                        has_float_type = True
-            
-            # If any value in the column is a float, convert all numeric values to float
-            if has_float_type:
-                for row in rows:
-                    if column_name in row and row[column_name] is not None:
-                        value = row[column_name]
-                        # Convert integers to floats for consistency
-                        if isinstance(value, int):
-                            row[column_name] = float(value)
-                        # Ensure string numbers that should be floats are converted
-                        elif isinstance(value, str):
-                            try:
-                                numeric_value = float(value)
-                                # Only convert if it was likely meant to be numeric
-                                if str(numeric_value) == value or str(int(numeric_value)) == value:
-                                    row[column_name] = numeric_value
-                            except (ValueError, TypeError):
-                                pass  # Keep as string if not convertible
 
     def get_fixture_file_rows(self, fixture_name, project_name, utdef_unique_id):
         # find fixture file object and store unit_test_definition unique_id
